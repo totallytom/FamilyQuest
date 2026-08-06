@@ -4,10 +4,13 @@ import { Redirect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAppData } from '@/data/AppDataContext';
+import { useAuth } from '@/data/AuthContext';
 import { colors } from '@/theme/theme';
 
 export default function Index() {
-  const { isLoading, family } = useAppData();
+  const { isLoading: appDataLoading, family } = useAppData();
+  const { isLoading: authLoading } = useAuth();
+  const isLoading = appDataLoading || authLoading;
 
   if (isLoading) {
     return (

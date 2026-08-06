@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
 import { useAppData, useCurrentMember } from '@/data/AppDataContext';
+import { useAuth } from '@/data/AuthContext';
 import { colors, fontSize, radius, spacing } from '@/theme/theme';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { Avatar } from '@/components/Avatar';
@@ -12,7 +13,8 @@ import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 
 export default function ProfileScreen() {
-  const { family, members, currentMemberId, setCurrentMember, removeMember, resetAllData } = useAppData();
+  const { family, members, currentMemberId, setCurrentMember, removeMember, resetDemoData, isDemoMode } = useAppData();
+  const { session, signOut, createInviteCode } = useAuth();
   const currentMember = useCurrentMember();
 
   const handleRemoveMember = (id: string, name: string) => {
@@ -27,14 +29,37 @@ export default function ProfileScreen() {
   };
 
   const handleReset = () => {
-    Alert.alert('Reset all data?', 'This clears your family, routines, and history from this device.', [
+    Alert.alert('Reset demo data?', 'This clears the demo family and history from this device.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Reset',
         style: 'destructive',
         onPress: async () => {
-          await resetAllData();
+          await resetDemoData();
           router.replace('/onboarding');
+        },
+      },
+    ]);
+  };
+
+  const handleInvite = async () => {
+    try {
+      const code = await createInviteCode();
+      Alert.alert('Invite code', `Share this with another parent so they can join ${family?.name}:\n\n${code}`);
+    } catch (error) {
+      Alert.alert('Could not create invite', error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const handleSignOut = () => {
+    Alert.alert('Sign out?', "You'll need to sign back in to see your family again.", [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Sign out',
+        style: 'destructive',
+        onPress: async () => {
+          await signOut();
+          router.replace('/');
         },
       },
     ]);
@@ -79,16 +104,33 @@ export default function ProfileScreen() {
 
       <Button label="Add family member" onPress={() => router.push('/add-member')} variant="secondary" icon="person-add" fullWidth />
 
-      <View style={styles.backendNote}>
-        <Ionicons name="cloud-offline-outline" size={16} color={colors.textMuted} />
-        <Text style={styles.backendNoteText}>
-          Everything is saved on this device for now. Account sync across devices is coming soon.
-        </Text>
-      </View>
-
-      <View style={styles.resetWrap}>
-        <Button label="Reset all data" onPress={handleReset} variant="danger" fullWidth />
-      </View>
+      {isDemoMode ? (
+        <>
+          <View style={styles.backendNote}>
+            <Ionicons name="sparkles-outline" size={16} color={colors.textMuted} />
+            <Text style={styles.backendNoteText}>
+              You&apos;re viewing a demo family saved only on this device. Sign in from Profile to
+              keep a real family in sync across everyone&apos;s phones.
+            </Text>
+          </View>
+          <View style={styles.resetWrap}>
+            <Button label="Reset demo data" onPress={handleReset} variant="danger" fullWidth />
+          </View>
+        </>
+      ) : (
+        <>
+          <Button label="Invite another parent" onPress={handleInvite} variant="secondary" icon="share-social" fullWidth />
+          <View style={styles.backendNote}>
+            <Ionicons name="cloud-done-outline" size={16} color={colors.textMuted} />
+            <Text style={styles.backendNoteText}>
+              This family is synced to your account — signed in as {session?.user.email}.
+            </Text>
+          </View>
+          <View style={styles.resetWrap}>
+            <Button label="Sign out" onPress={handleSignOut} variant="danger" fullWidth />
+          </View>
+        </>
+      )}
     </ScreenContainer>
   );
 }

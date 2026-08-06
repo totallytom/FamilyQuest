@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
 import { useAppData } from '@/data/AppDataContext';
+import { useAuth } from '@/data/AuthContext';
 import { colors, fontSize, radius, spacing } from '@/theme/theme';
 import { avatarEmojis, avatarPalette } from '@/theme/colors';
 import { Avatar } from '@/components/Avatar';
@@ -18,25 +19,101 @@ interface DraftMember {
   emoji: string;
 }
 
+type Step =
+  | 'start'
+  | 'create-auth'
+  | 'family'
+  | 'you'
+  | 'members'
+  | 'join-auth'
+  | 'join-code'
+  | 'join-you';
+
 export default function Onboarding() {
-  const { createFamily, addMember, loadDemoFamily } = useAppData();
-  const [step, setStep] = useState<'family' | 'members'>('family');
+  const { family, addMember, loadDemoFamily } = useAppData();
+  const { session, signIn, signUp, createFamilyAndJoin, joinFamilyWithCode } = useAuth();
+
+  const [step, setStep] = useState<Step>('start');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [awaitingFamilyLoad, setAwaitingFamilyLoad] = useState<'members' | 'tabs' | null>(null);
+
+  // Shared auth fields (used by both the create and join flows, whichever needs them)
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
+  // Create-a-family flow
   const [familyName, setFamilyName] = useState('');
   const [members, setMembers] = useState<DraftMember[]>([]);
-
   const [draftName, setDraftName] = useState('');
   const [draftRole, setDraftRole] = useState<Role>('kid');
   const [draftColor, setDraftColor] = useState<string>(avatarPalette[0]);
   const [draftEmoji, setDraftEmoji] = useState<string>(avatarEmojis[0]);
+
+  // "Your own profile" fields, shared by the create-owner and join-member steps
+  const [profileName, setProfileName] = useState('');
+  const [profileColor, setProfileColor] = useState<string>(avatarPalette[0]);
+  const [profileEmoji, setProfileEmoji] = useState<string>(avatarEmojis[0]);
+
+  // Join-a-family flow
+  const [joinCode, setJoinCode] = useState('');
+
+  useEffect(() => {
+    if (awaitingFamilyLoad === 'members' && family) {
+      setAwaitingFamilyLoad(null);
+      setIsSubmitting(false);
+      setStep('members');
+    }
+  }, [awaitingFamilyLoad, family]);
 
   const handleTryDemo = async () => {
     await loadDemoFamily();
     router.replace('/(tabs)');
   };
 
+  const handleSelectCreate = () => setStep(session ? 'family' : 'create-auth');
+  const handleSelectJoin = () => setStep(session ? 'join-code' : 'join-auth');
+
+  const handleAuthSubmit = async (nextStepIfSignedIn: Step) => {
+    if (!email.trim() || password.length < 6) return;
+    setIsSubmitting(true);
+    try {
+      if (nextStepIfSignedIn === 'family') {
+        const { needsEmailConfirmation } = await signUp(email.trim(), password);
+        if (needsEmailConfirmation) {
+          Alert.alert('Check your email', 'Confirm your address, then come back and sign in.');
+          return;
+        }
+      } else {
+        await signIn(email.trim(), password);
+      }
+      setStep(nextStepIfSignedIn);
+    } catch (error) {
+      Alert.alert('Something went wrong', error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleContinueFromFamily = () => {
     if (!familyName.trim()) return;
-    setStep('members');
+    setStep('you');
+  };
+
+  const handleFinishOwnerProfile = async () => {
+    if (!profileName.trim()) return;
+    setIsSubmitting(true);
+    try {
+      await createFamilyAndJoin({
+        familyName: familyName.trim(),
+        ownerName: profileName.trim(),
+        ownerColor: profileColor,
+        ownerEmoji: profileEmoji,
+      });
+      setAwaitingFamilyLoad('members');
+    } catch (error) {
+      Alert.alert('Could not create family', error instanceof Error ? error.message : String(error));
+      setIsSubmitting(false);
+    }
   };
 
   const handleAddDraftMember = () => {
@@ -53,12 +130,32 @@ export default function Onboarding() {
   };
 
   const handleFinish = async () => {
-    if (members.length === 0) return;
-    await createFamily(familyName.trim());
     for (const member of members) {
       await addMember(member);
     }
     router.replace('/(tabs)');
+  };
+
+  const handleJoinCodeSubmit = () => {
+    if (joinCode.trim().length < 4) return;
+    setStep('join-you');
+  };
+
+  const handleFinishJoinProfile = async () => {
+    if (!profileName.trim()) return;
+    setIsSubmitting(true);
+    try {
+      await joinFamilyWithCode({
+        code: joinCode.trim(),
+        memberName: profileName.trim(),
+        memberColor: profileColor,
+        memberEmoji: profileEmoji,
+      });
+      router.replace('/');
+    } catch (error) {
+      Alert.alert('Could not join family', error instanceof Error ? error.message : String(error));
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -70,7 +167,65 @@ export default function Onboarding() {
         chores, and everything in between.
       </Text>
 
-      {step === 'family' ? (
+      {step === 'start' && (
+        <View style={styles.card}>
+          <Button label="Create a family" onPress={handleSelectCreate} icon="people" fullWidth />
+          <View style={styles.stackGap} />
+          <Button label="I have an invite code" onPress={handleSelectJoin} variant="secondary" icon="key" fullWidth />
+
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          <Button label="Try a demo family" onPress={handleTryDemo} variant="secondary" icon="sparkles" fullWidth />
+
+          {!session && (
+            <>
+              <View style={styles.stackGap} />
+              <Button label="Already have an account? Sign in" onPress={() => router.push('/auth')} variant="ghost" fullWidth />
+            </>
+          )}
+        </View>
+      )}
+
+      {(step === 'create-auth' || step === 'join-auth') && (
+        <View style={styles.card}>
+          <Text style={styles.label}>{step === 'create-auth' ? 'Create your account' : 'Sign in'}</Text>
+          <TextInput
+            value={email}
+            onChangeText={setEmail}
+            placeholder="you@example.com"
+            placeholderTextColor={colors.textMuted}
+            style={styles.input}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="email-address"
+            autoFocus
+          />
+          <TextInput
+            value={password}
+            onChangeText={setPassword}
+            placeholder="At least 6 characters"
+            placeholderTextColor={colors.textMuted}
+            style={styles.input}
+            secureTextEntry
+            returnKeyType="done"
+          />
+          <Button
+            label={step === 'create-auth' ? 'Continue' : 'Sign in'}
+            onPress={() => handleAuthSubmit(step === 'create-auth' ? 'family' : 'join-code')}
+            disabled={!email.trim() || password.length < 6}
+            loading={isSubmitting}
+            fullWidth
+          />
+          <View style={styles.stackGap} />
+          <Button label="Back" onPress={() => setStep('start')} variant="ghost" fullWidth />
+        </View>
+      )}
+
+      {step === 'family' && (
         <View style={styles.card}>
           <Text style={styles.label}>What&apos;s your family name?</Text>
           <TextInput
@@ -84,19 +239,73 @@ export default function Onboarding() {
             onSubmitEditing={handleContinueFromFamily}
           />
           <Button label="Continue" onPress={handleContinueFromFamily} disabled={!familyName.trim()} fullWidth />
+        </View>
+      )}
 
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>or</Text>
-            <View style={styles.dividerLine} />
+      {step === 'join-code' && (
+        <View style={styles.card}>
+          <Text style={styles.label}>Enter your family&apos;s invite code</Text>
+          <Text style={styles.helperText}>Get this from a parent who&apos;s already set up the family.</Text>
+          <TextInput
+            value={joinCode}
+            onChangeText={setJoinCode}
+            placeholder="e.g. 7K3F2Q"
+            placeholderTextColor={colors.textMuted}
+            style={styles.input}
+            autoCapitalize="characters"
+            autoFocus
+            returnKeyType="next"
+            onSubmitEditing={handleJoinCodeSubmit}
+          />
+          <Button label="Continue" onPress={handleJoinCodeSubmit} disabled={joinCode.trim().length < 4} fullWidth />
+        </View>
+      )}
+
+      {(step === 'you' || step === 'join-you') && (
+        <View style={styles.card}>
+          <Text style={styles.label}>What should we call you?</Text>
+          <TextInput
+            value={profileName}
+            onChangeText={setProfileName}
+            placeholder="Your name"
+            placeholderTextColor={colors.textMuted}
+            style={styles.input}
+            autoFocus
+          />
+
+          <Text style={styles.pickerLabel}>Avatar</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.emojiRow}>
+            {avatarEmojis.map((emoji) => (
+              <Pressable key={emoji} onPress={() => setProfileEmoji(emoji)}>
+                <Avatar emoji={emoji} color={profileColor} size={40} ringColor={emoji === profileEmoji ? colors.primary : undefined} />
+              </Pressable>
+            ))}
+          </ScrollView>
+
+          <View style={styles.colorRow}>
+            {avatarPalette.map((color) => (
+              <Pressable
+                key={color}
+                onPress={() => setProfileColor(color)}
+                style={[styles.colorSwatch, { backgroundColor: color }, profileColor === color && styles.colorSwatchActive]}
+              />
+            ))}
           </View>
 
-          <Button label="Try a demo family" onPress={handleTryDemo} variant="secondary" icon="sparkles" fullWidth />
+          <Button
+            label={step === 'you' ? 'Create family' : 'Join family'}
+            onPress={step === 'you' ? handleFinishOwnerProfile : handleFinishJoinProfile}
+            disabled={!profileName.trim()}
+            loading={isSubmitting}
+            fullWidth
+          />
         </View>
-      ) : (
+      )}
+
+      {step === 'members' && (
         <View style={styles.card}>
-          <Text style={styles.label}>Who&apos;s in {familyName}?</Text>
-          <Text style={styles.helperText}>Add parents and kids — everyone can see each other&apos;s progress.</Text>
+          <Text style={styles.label}>Who else is in {familyName}?</Text>
+          <Text style={styles.helperText}>Add your kids — everyone can see each other&apos;s progress.</Text>
 
           {members.length > 0 && (
             <View style={styles.memberList}>
@@ -167,8 +376,7 @@ export default function Onboarding() {
           </View>
 
           <View style={styles.finishRow}>
-            <Button label="Back" onPress={() => setStep('family')} variant="ghost" />
-            <Button label="Finish setup" onPress={handleFinish} disabled={members.length === 0} />
+            <Button label="Finish setup" onPress={handleFinish} fullWidth />
           </View>
         </View>
       )}
@@ -204,6 +412,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderRadius: radius.lg,
     padding: spacing.lg,
+  },
+  stackGap: {
+    height: spacing.sm,
   },
   label: {
     fontSize: fontSize.lg,
@@ -321,9 +532,6 @@ const styles = StyleSheet.create({
     borderColor: colors.text,
   },
   finishRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     marginTop: spacing.lg,
   },
 });
