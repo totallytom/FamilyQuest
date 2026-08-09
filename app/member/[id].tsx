@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useLocalSearchParams } from 'expo-router';
 
-import { useAppData, useCurrentMember } from '@/data/AppDataContext';
+import { useAppData, useMyMember } from '@/data/AppDataContext';
 import { memberDayStats, tasksForMemberOnDate } from '@/data/selectors';
 import { colors, fontSize, radius, spacing } from '@/theme/theme';
 import { ScreenContainer } from '@/components/ScreenContainer';
@@ -18,7 +18,7 @@ import type { IoniconName } from '@/theme/icons';
 export default function MemberDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { members, routines, tasks, completions, markTaskDone, undoTaskDone, reviewTask } = useAppData();
-  const currentMember = useCurrentMember();
+  const myMember = useMyMember();
   const [selectedDate, setSelectedDate] = useState(dateKey());
 
   const member = members.find((m) => m.id === id);
@@ -31,8 +31,8 @@ export default function MemberDetailScreen() {
     );
   }
 
-  const isOwnPage = currentMember?.id === member.id;
-  const canReview = currentMember?.role === 'parent' && !isOwnPage;
+  const isOwnPage = myMember?.id === member.id;
+  const canReview = myMember?.role === 'parent' && !isOwnPage;
   const isToday = selectedDate === dateKey();
 
   const stats = memberDayStats(tasks, completions, member.id, selectedDate);
@@ -114,8 +114,8 @@ export default function MemberDetailScreen() {
                       ? () => (status === 'pending' || status === 'rejected' ? markTaskDone(task.id, selectedDate) : undoTaskDone(task.id, selectedDate))
                       : undefined
                   }
-                  onApprove={canReview && currentMember ? () => reviewTask(task.id, selectedDate, 'approved', currentMember.id) : undefined}
-                  onReject={canReview && currentMember ? () => reviewTask(task.id, selectedDate, 'rejected', currentMember.id) : undefined}
+                  onApprove={canReview && myMember ? () => reviewTask(task.id, selectedDate, 'approved', myMember.id) : undefined}
+                  onReject={canReview && myMember ? () => reviewTask(task.id, selectedDate, 'rejected', myMember.id) : undefined}
                 />
               );
             })}

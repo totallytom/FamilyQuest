@@ -32,6 +32,7 @@ export function mapMember(row: any): FamilyMember {
   return {
     id: row.id,
     familyId: row.family_id,
+    userId: row.user_id ?? undefined,
     name: row.name,
     role: row.role,
     color: row.color,

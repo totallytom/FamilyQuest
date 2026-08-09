@@ -27,11 +27,12 @@ type Step =
   | 'members'
   | 'join-auth'
   | 'join-code'
-  | 'join-you';
+  | 'join-you'
+  | 'kid-code';
 
 export default function Onboarding() {
   const { family, addMember, loadDemoFamily } = useAppData();
-  const { session, signIn, signUp, createFamilyAndJoin, joinFamilyWithCode } = useAuth();
+  const { session, signIn, signUp, createFamilyAndJoin, joinFamilyWithCode, claimKidProfile } = useAuth();
 
   const [step, setStep] = useState<Step>('start');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -56,6 +57,9 @@ export default function Onboarding() {
 
   // Join-a-family flow
   const [joinCode, setJoinCode] = useState('');
+
+  // Kid device pairing flow
+  const [kidCode, setKidCode] = useState('');
 
   useEffect(() => {
     if (awaitingFamilyLoad === 'members' && family) {
@@ -136,6 +140,18 @@ export default function Onboarding() {
     router.replace('/(tabs)');
   };
 
+  const handleClaimKidProfile = async () => {
+    if (kidCode.trim().length < 4) return;
+    setIsSubmitting(true);
+    try {
+      await claimKidProfile(kidCode.trim());
+      router.replace('/');
+    } catch (error) {
+      Alert.alert('Could not claim profile', error instanceof Error ? error.message : String(error));
+      setIsSubmitting(false);
+    }
+  };
+
   const handleJoinCodeSubmit = () => {
     if (joinCode.trim().length < 4) return;
     setStep('join-you');
@@ -172,6 +188,8 @@ export default function Onboarding() {
           <Button label="Create a family" onPress={handleSelectCreate} icon="people" fullWidth />
           <View style={styles.stackGap} />
           <Button label="I have an invite code" onPress={handleSelectJoin} variant="secondary" icon="key" fullWidth />
+          <View style={styles.stackGap} />
+          <Button label="I have a code from my parent" onPress={() => setStep('kid-code')} variant="secondary" icon="qr-code" fullWidth />
 
           <View style={styles.divider}>
             <View style={styles.dividerLine} />
@@ -239,6 +257,27 @@ export default function Onboarding() {
             onSubmitEditing={handleContinueFromFamily}
           />
           <Button label="Continue" onPress={handleContinueFromFamily} disabled={!familyName.trim()} fullWidth />
+        </View>
+      )}
+
+      {step === 'kid-code' && (
+        <View style={styles.card}>
+          <Text style={styles.label}>Enter the code from your parent&apos;s phone</Text>
+          <Text style={styles.helperText}>They can find it under your name in their Profile tab.</Text>
+          <TextInput
+            value={kidCode}
+            onChangeText={setKidCode}
+            placeholder="e.g. 7K3F2Q"
+            placeholderTextColor={colors.textMuted}
+            style={styles.input}
+            autoCapitalize="characters"
+            autoFocus
+            returnKeyType="done"
+            onSubmitEditing={handleClaimKidProfile}
+          />
+          <Button label="Continue" onPress={handleClaimKidProfile} disabled={kidCode.trim().length < 4} loading={isSubmitting} fullWidth />
+          <View style={styles.stackGap} />
+          <Button label="Back" onPress={() => setStep('start')} variant="ghost" fullWidth />
         </View>
       )}
 

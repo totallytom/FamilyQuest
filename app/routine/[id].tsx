@@ -3,7 +3,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 
-import { useAppData } from '@/data/AppDataContext';
+import { useAppData, useMyMember } from '@/data/AppDataContext';
 import { colors, fontSize, radius, spacing } from '@/theme/theme';
 import { avatarPalette } from '@/theme/colors';
 import { routineIconOptions, taskIconOptions } from '@/theme/icons';
@@ -19,6 +19,7 @@ import { EmptyState } from '@/components/EmptyState';
 export default function RoutineScreen() {
   const { id, memberId: memberIdParam } = useLocalSearchParams<{ id: string; memberId?: string }>();
   const { members, routines, tasks, addRoutine, updateRoutine, removeRoutine, addTask, updateTask, removeTask } = useAppData();
+  const canManage = useMyMember()?.role === 'parent';
 
   const isNew = id === 'new';
   const routine = routines.find((r) => r.id === id);
@@ -38,6 +39,14 @@ export default function RoutineScreen() {
     return (
       <ScreenContainer edges={['left', 'right']}>
         <EmptyState icon="alert-circle" title="Family member not found" />
+      </ScreenContainer>
+    );
+  }
+
+  if (isNew && !canManage) {
+    return (
+      <ScreenContainer edges={['left', 'right']}>
+        <EmptyState icon="lock-closed" title="Parents only" subtitle="Switch to a parent profile to create routines." />
       </ScreenContainer>
     );
   }
@@ -115,52 +124,63 @@ export default function RoutineScreen() {
     <ScreenContainer edges={['left', 'right']}>
       <Stack.Screen options={{ title: isNew ? 'New Routine' : routine?.title ?? 'Routine' }} />
 
-      <Card style={styles.card}>
-        <Text style={styles.label}>Routine name</Text>
-        <TextInput
-          value={title}
-          onChangeText={setTitle}
-          placeholder="e.g. Morning Routine"
-          placeholderTextColor={colors.textMuted}
-          style={styles.input}
-        />
+      {canManage ? (
+        <Card style={styles.card}>
+          <Text style={styles.label}>Routine name</Text>
+          <TextInput
+            value={title}
+            onChangeText={setTitle}
+            placeholder="e.g. Morning Routine"
+            placeholderTextColor={colors.textMuted}
+            style={styles.input}
+          />
 
-        <Text style={styles.pickerLabel}>Icon</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.iconRow}>
-          {routineIconOptions.map((opt) => (
-            <Pressable
-              key={opt}
-              onPress={() => setIcon(opt)}
-              style={[styles.iconOption, { backgroundColor: color + '33' }, icon === opt && { borderColor: color, borderWidth: 2 }]}
-            >
-              <Ionicons name={opt} size={18} color={color} />
-            </Pressable>
-          ))}
-        </ScrollView>
+          <Text style={styles.pickerLabel}>Icon</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.iconRow}>
+            {routineIconOptions.map((opt) => (
+              <Pressable
+                key={opt}
+                onPress={() => setIcon(opt)}
+                style={[styles.iconOption, { backgroundColor: color + '33' }, icon === opt && { borderColor: color, borderWidth: 2 }]}
+              >
+                <Ionicons name={opt} size={18} color={color} />
+              </Pressable>
+            ))}
+          </ScrollView>
 
-        <Text style={styles.pickerLabel}>Color</Text>
-        <View style={styles.colorRow}>
-          {avatarPalette.map((c) => (
-            <Pressable
-              key={c}
-              onPress={() => setColor(c)}
-              style={[styles.colorSwatch, { backgroundColor: c }, color === c && styles.colorSwatchActive]}
-            />
-          ))}
-        </View>
+          <Text style={styles.pickerLabel}>Color</Text>
+          <View style={styles.colorRow}>
+            {avatarPalette.map((c) => (
+              <Pressable
+                key={c}
+                onPress={() => setColor(c)}
+                style={[styles.colorSwatch, { backgroundColor: c }, color === c && styles.colorSwatchActive]}
+              />
+            ))}
+          </View>
 
-        <View style={styles.saveRow}>
-          <Button label={isNew ? 'Create routine' : 'Save changes'} onPress={handleSaveRoutine} disabled={!title.trim()} />
-          {!isNew && <Button label="Delete" onPress={handleDeleteRoutine} variant="danger" />}
-        </View>
-      </Card>
+          <View style={styles.saveRow}>
+            <Button label={isNew ? 'Create routine' : 'Save changes'} onPress={handleSaveRoutine} disabled={!title.trim()} />
+            {!isNew && <Button label="Delete" onPress={handleDeleteRoutine} variant="danger" />}
+          </View>
+        </Card>
+      ) : (
+        <Card style={styles.card}>
+          <View style={styles.taskRow}>
+            <View style={[styles.taskIconWrap, { backgroundColor: color + '33' }]}>
+              <Ionicons name={icon} size={18} color={color} />
+            </View>
+            <Text style={styles.label}>{title}</Text>
+          </View>
+        </Card>
+      )}
 
       {!isNew && routine && (
         <>
           <Text style={styles.sectionTitle}>Tasks</Text>
 
           {routineTasks.length === 0 ? (
-            <Text style={styles.noTasks}>No tasks yet — add the first one below.</Text>
+            <Text style={styles.noTasks}>No tasks yet{canManage ? ' — add the first one below.' : '.'}</Text>
           ) : (
             routineTasks.map((task) => (
               <Card key={task.id} style={styles.taskCard}>
@@ -174,68 +194,74 @@ export default function RoutineScreen() {
                       {task.points} stars · {task.daysOfWeek.length === 7 ? 'Every day' : task.daysOfWeek.map((d) => WEEKDAY_LABELS[d]).join(' ')}
                     </Text>
                   </View>
-                  <Pressable onPress={() => handleEditTaskRow(task.id)} hitSlop={8} style={styles.taskAction}>
-                    <Ionicons name="pencil" size={16} color={colors.textMuted} />
-                  </Pressable>
-                  <Pressable onPress={() => handleDeleteTask(task.id)} hitSlop={8} style={styles.taskAction}>
-                    <Ionicons name="trash" size={16} color={colors.danger} />
-                  </Pressable>
+                  {canManage && (
+                    <>
+                      <Pressable onPress={() => handleEditTaskRow(task.id)} hitSlop={8} style={styles.taskAction}>
+                        <Ionicons name="pencil" size={16} color={colors.textMuted} />
+                      </Pressable>
+                      <Pressable onPress={() => handleDeleteTask(task.id)} hitSlop={8} style={styles.taskAction}>
+                        <Ionicons name="trash" size={16} color={colors.danger} />
+                      </Pressable>
+                    </>
+                  )}
                 </View>
               </Card>
             ))
           )}
 
-          <Card style={styles.card}>
-            <Text style={styles.label}>{editingTaskId ? 'Edit task' : 'Add a task'}</Text>
-            <TextInput
-              value={taskTitle}
-              onChangeText={setTaskTitle}
-              placeholder="e.g. Make bed"
-              placeholderTextColor={colors.textMuted}
-              style={styles.input}
-            />
-
-            <Text style={styles.pickerLabel}>Icon</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.iconRow}>
-              {taskIconOptions.map((opt) => (
-                <Pressable
-                  key={opt}
-                  onPress={() => setTaskIcon(opt)}
-                  style={[styles.iconOption, taskIcon === opt && { borderColor: colors.primary, borderWidth: 2 }]}
-                >
-                  <Ionicons name={opt} size={18} color={colors.primaryDark} />
-                </Pressable>
-              ))}
-            </ScrollView>
-
-            <Text style={styles.pickerLabel}>Repeats on</Text>
-            <View style={styles.daysWrap}>
-              <DayOfWeekPicker value={taskDays} onChange={setTaskDays} />
-            </View>
-
-            <Text style={styles.pickerLabel}>Stars for completing</Text>
-            <View style={styles.pointsRow}>
-              <Pressable onPress={() => setTaskPoints((p) => Math.max(1, p - 5))} style={styles.pointsButton}>
-                <Ionicons name="remove" size={18} color={colors.text} />
-              </Pressable>
-              <View style={styles.pointsValueWrap}>
-                <Ionicons name="star" size={16} color={colors.star} />
-                <Text style={styles.pointsValue}>{taskPoints}</Text>
-              </View>
-              <Pressable onPress={() => setTaskPoints((p) => Math.min(50, p + 5))} style={styles.pointsButton}>
-                <Ionicons name="add" size={18} color={colors.text} />
-              </Pressable>
-            </View>
-
-            <View style={styles.saveRow}>
-              <Button
-                label={editingTaskId ? 'Update task' : 'Add task'}
-                onPress={handleSubmitTask}
-                disabled={!taskTitle.trim() || taskDays.length === 0}
+          {canManage && (
+            <Card style={styles.card}>
+              <Text style={styles.label}>{editingTaskId ? 'Edit task' : 'Add a task'}</Text>
+              <TextInput
+                value={taskTitle}
+                onChangeText={setTaskTitle}
+                placeholder="e.g. Make bed"
+                placeholderTextColor={colors.textMuted}
+                style={styles.input}
               />
-              {editingTaskId && <Button label="Cancel" onPress={resetTaskForm} variant="ghost" />}
-            </View>
-          </Card>
+
+              <Text style={styles.pickerLabel}>Icon</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.iconRow}>
+                {taskIconOptions.map((opt) => (
+                  <Pressable
+                    key={opt}
+                    onPress={() => setTaskIcon(opt)}
+                    style={[styles.iconOption, taskIcon === opt && { borderColor: colors.primary, borderWidth: 2 }]}
+                  >
+                    <Ionicons name={opt} size={18} color={colors.primaryDark} />
+                  </Pressable>
+                ))}
+              </ScrollView>
+
+              <Text style={styles.pickerLabel}>Repeats on</Text>
+              <View style={styles.daysWrap}>
+                <DayOfWeekPicker value={taskDays} onChange={setTaskDays} />
+              </View>
+
+              <Text style={styles.pickerLabel}>Stars for completing</Text>
+              <View style={styles.pointsRow}>
+                <Pressable onPress={() => setTaskPoints((p) => Math.max(1, p - 5))} style={styles.pointsButton}>
+                  <Ionicons name="remove" size={18} color={colors.text} />
+                </Pressable>
+                <View style={styles.pointsValueWrap}>
+                  <Ionicons name="star" size={16} color={colors.star} />
+                  <Text style={styles.pointsValue}>{taskPoints}</Text>
+                </View>
+                <Pressable onPress={() => setTaskPoints((p) => Math.min(50, p + 5))} style={styles.pointsButton}>
+                  <Ionicons name="add" size={18} color={colors.text} />
+                </Pressable>
+              </View>
+
+              <View style={styles.saveRow}>
+                <Button
+                  label={editingTaskId ? 'Update task' : 'Add task'}
+                  onPress={handleSubmitTask}
+                  disabled={!taskTitle.trim() || taskDays.length === 0}
+                />
+                {editingTaskId && <Button label="Cancel" onPress={resetTaskForm} variant="ghost" />}
+              </View>
+            </Card>
+          )}
         </>
       )}
     </ScreenContainer>

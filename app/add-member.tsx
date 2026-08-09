@@ -2,16 +2,18 @@ import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, Stack } from 'expo-router';
 
-import { useAppData } from '@/data/AppDataContext';
+import { useAppData, useMyMember } from '@/data/AppDataContext';
 import { colors, fontSize, radius, spacing } from '@/theme/theme';
 import { avatarEmojis, avatarPalette } from '@/theme/colors';
 import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
 import { ScreenContainer } from '@/components/ScreenContainer';
+import { EmptyState } from '@/components/EmptyState';
 import type { Role } from '@/types/models';
 
 export default function AddMemberScreen() {
   const { addMember, members } = useAppData();
+  const myMember = useMyMember();
   const [name, setName] = useState('');
   const [role, setRole] = useState<Role>('kid');
   const [color, setColor] = useState<string>(avatarPalette[members.length % avatarPalette.length]);
@@ -22,6 +24,15 @@ export default function AddMemberScreen() {
     await addMember({ name: name.trim(), role, color, emoji });
     router.back();
   };
+
+  if (myMember?.role !== 'parent') {
+    return (
+      <ScreenContainer edges={['left', 'right']}>
+        <Stack.Screen options={{ title: 'Add Family Member' }} />
+        <EmptyState icon="lock-closed" title="Parents only" subtitle="Switch to a parent profile to add family members." />
+      </ScreenContainer>
+    );
+  }
 
   return (
     <ScreenContainer edges={['left', 'right']}>

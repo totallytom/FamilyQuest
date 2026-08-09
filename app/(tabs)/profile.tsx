@@ -3,7 +3,7 @@ import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
-import { useAppData, useCurrentMember } from '@/data/AppDataContext';
+import { useAppData, useCurrentMember, useMyMember } from '@/data/AppDataContext';
 import { useAuth } from '@/data/AuthContext';
 import { colors, fontSize, radius, spacing } from '@/theme/theme';
 import { ScreenContainer } from '@/components/ScreenContainer';
@@ -16,6 +16,7 @@ export default function ProfileScreen() {
   const { family, members, currentMemberId, setCurrentMember, removeMember, resetDemoData, isDemoMode } = useAppData();
   const { session, signOut, createInviteCode } = useAuth();
   const currentMember = useCurrentMember();
+  const isParent = useMyMember()?.role === 'parent';
 
   const handleRemoveMember = (id: string, name: string) => {
     if (members.length <= 1) {
@@ -86,23 +87,39 @@ export default function ProfileScreen() {
       <Text style={styles.sectionTitle}>{family?.name}</Text>
       <Text style={styles.sectionSubtitle}>Tap a name below to switch who's using the app.</Text>
 
-      {members.map((member) => (
-        <Pressable key={member.id} onPress={() => setCurrentMember(member.id)}>
-          <Card style={styles.memberCard}>
-            <Avatar emoji={member.emoji} color={member.color} size={40} ringColor={member.id === currentMemberId ? colors.primary : undefined} />
-            <View style={styles.memberInfo}>
-              <Text style={styles.memberName}>{member.name}</Text>
-              <Text style={styles.memberRole}>{member.role === 'kid' ? 'Kid' : 'Parent'}</Text>
-            </View>
-            {member.id === currentMemberId && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
-            <Pressable onPress={() => handleRemoveMember(member.id, member.name)} hitSlop={8} style={styles.removeButton}>
-              <Ionicons name="trash-outline" size={18} color={colors.textMuted} />
+      {members.map((member) => {
+        const canExportAccount = isParent && !isDemoMode && member.role === 'kid';
+        return (
+          <Card key={member.id} style={styles.memberCard}>
+            <Pressable onPress={() => setCurrentMember(member.id)} style={styles.memberRow}>
+              <Avatar emoji={member.emoji} color={member.color} size={40} ringColor={member.id === currentMemberId ? colors.primary : undefined} />
+              <View style={styles.memberInfo}>
+                <Text style={styles.memberName}>{member.name}</Text>
+                <Text style={styles.memberRole}>{member.role === 'kid' ? 'Kid' : 'Parent'}</Text>
+              </View>
+              {member.id === currentMemberId && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
+              {isParent && (
+                <Pressable onPress={() => handleRemoveMember(member.id, member.name)} hitSlop={8} style={styles.removeButton}>
+                  <Ionicons name="trash-outline" size={18} color={colors.textMuted} />
+                </Pressable>
+              )}
             </Pressable>
+            {canExportAccount && (
+              <Button
+                label="Export account"
+                onPress={() => router.push({ pathname: '/kid-code/[memberId]', params: { memberId: member.id } })}
+                variant="secondary"
+                icon="qr-code-outline"
+                fullWidth
+              />
+            )}
           </Card>
-        </Pressable>
-      ))}
+        );
+      })}
 
-      <Button label="Add family member" onPress={() => router.push('/add-member')} variant="secondary" icon="person-add" fullWidth />
+      {isParent && (
+        <Button label="Add family member" onPress={() => router.push('/add-member')} variant="secondary" icon="person-add" fullWidth />
+      )}
 
       {isDemoMode ? (
         <>
@@ -119,7 +136,9 @@ export default function ProfileScreen() {
         </>
       ) : (
         <>
-          <Button label="Invite another parent" onPress={handleInvite} variant="secondary" icon="share-social" fullWidth />
+          {isParent && (
+            <Button label="Invite another parent" onPress={handleInvite} variant="secondary" icon="share-social" fullWidth />
+          )}
           <View style={styles.backendNote}>
             <Ionicons name="cloud-done-outline" size={16} color={colors.textMuted} />
             <Text style={styles.backendNoteText}>
@@ -183,11 +202,14 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   memberCard: {
+    marginBottom: spacing.sm,
+    paddingVertical: spacing.md,
+    gap: spacing.md,
+  },
+  memberRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    marginBottom: spacing.sm,
-    paddingVertical: spacing.md,
   },
   memberInfo: {
     flex: 1,

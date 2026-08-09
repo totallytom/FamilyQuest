@@ -23,6 +23,8 @@ interface AuthContextValue {
     memberEmoji: string;
   }) => Promise<string>;
   createInviteCode: () => Promise<string>;
+  createKidPairingCode: (memberId: string) => Promise<string>;
+  claimKidProfile: (code: string) => Promise<string>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -124,6 +126,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return code;
   }, [familyId, session]);
 
+  const createKidPairingCode = useCallback(
+    async (memberId: string) => {
+      if (!session) throw new Error('Must be signed in to create a pairing code');
+      const code = generateInviteCode();
+      const expiresAt = new Date(Date.now() + 1000 * 60 * 60).toISOString(); // 1 hour
+      const { error } = await supabase
+        .from('kid_pairing_codes')
+        .insert({ member_id: memberId, code, created_by: session.user.id, expires_at: expiresAt });
+      if (error) throw error;
+      return code;
+    },
+    [session]
+  );
+
+  const claimKidProfile = useCallback(async (code: string) => {
+    if (!session) {
+      const { error: anonError } = await supabase.auth.signInAnonymously();
+      if (anonError) throw anonError;
+    }
+    const { data, error } = await supabase.rpc('claim_kid_profile', { pairing_code: code.trim().toUpperCase() });
+    if (error) throw error;
+    setFamilyId(data);
+    return data as string;
+  }, [session]);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       session,
@@ -135,8 +162,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       createFamilyAndJoin,
       joinFamilyWithCode,
       createInviteCode,
+      createKidPairingCode,
+      claimKidProfile,
     }),
-    [session, isLoading, familyId, signUp, signIn, signOut, createFamilyAndJoin, joinFamilyWithCode, createInviteCode]
+    [
+      session,
+      isLoading,
+      familyId,
+      signUp,
+      signIn,
+      signOut,
+      createFamilyAndJoin,
+      joinFamilyWithCode,
+      createInviteCode,
+      createKidPairingCode,
+      claimKidProfile,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

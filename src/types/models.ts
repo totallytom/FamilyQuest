@@ -9,6 +9,8 @@ export interface Family {
 export interface FamilyMember {
   id: string;
   familyId: string;
+  /** Supabase auth.users id this member is bound to, if any (unset until claimed for 'real' families) */
+  userId?: string;
   name: string;
   role: Role;
   color: string;

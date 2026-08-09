@@ -29,6 +29,8 @@ interface AppDataState {
   tasks: RoutineTask[];
   completions: TaskCompletion[];
   currentMemberId: string | null;
+  /** The signed-in user's own member row — the source of truth for role gating (unlike currentMemberId, which is just a freely-switchable "viewing as" preference). Falls back to currentMemberId in demo mode, where there's no real auth session to anchor to. */
+  myMemberId: string | null;
   isDemoMode: boolean;
 }
 
@@ -82,6 +84,11 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [tasks, setTasks] = useState<RoutineTask[]>([]);
   const [completions, setCompletions] = useState<TaskCompletion[]>([]);
   const [currentMemberId, setCurrentMemberId] = useState<string | null>(null);
+
+  const myMemberId = useMemo(() => {
+    if (mode === 'real') return members.find((m) => m.userId === session?.user.id)?.id ?? null;
+    return currentMemberId;
+  }, [mode, session, members, currentMemberId]);
 
   const modeRef = useRef<Mode>(null);
   modeRef.current = mode;
@@ -466,6 +473,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       tasks,
       completions,
       currentMemberId,
+      myMemberId,
       isDemoMode: mode === 'demo',
       loadDemoFamily,
       resetDemoData,
@@ -491,6 +499,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       tasks,
       completions,
       currentMemberId,
+      myMemberId,
       mode,
       loadDemoFamily,
       resetDemoData,
@@ -522,6 +531,12 @@ export function useAppData(): AppDataContextValue {
 export function useCurrentMember(): FamilyMember | null {
   const { members, currentMemberId } = useAppData();
   return members.find((m) => m.id === currentMemberId) ?? null;
+}
+
+/** The signed-in user's own family member — use this (not useCurrentMember) for any parent-only permission check. */
+export function useMyMember(): FamilyMember | null {
+  const { members, myMemberId } = useAppData();
+  return members.find((m) => m.id === myMemberId) ?? null;
 }
 
 export function useToday(): string {

@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
-import { useAppData } from '@/data/AppDataContext';
+import { useAppData, useMyMember } from '@/data/AppDataContext';
 import { colors, fontSize, radius, spacing } from '@/theme/theme';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { Avatar } from '@/components/Avatar';
@@ -13,6 +13,7 @@ import type { IoniconName } from '@/theme/icons';
 
 export default function RoutinesScreen() {
   const { members, routines, tasks } = useAppData();
+  const isParent = useMyMember()?.role === 'parent';
 
   return (
     <ScreenContainer>
@@ -53,10 +54,12 @@ export default function RoutinesScreen() {
                 })
               )}
 
-              <Pressable onPress={() => router.push(`/routine/new?memberId=${member.id}`)} style={styles.addButton}>
-                <Ionicons name="add-circle" size={18} color={colors.primary} />
-                <Text style={styles.addButtonText}>New routine for {member.name}</Text>
-              </Pressable>
+              {isParent && (
+                <Pressable onPress={() => router.push(`/routine/new?memberId=${member.id}`)} style={styles.addButton}>
+                  <Ionicons name="add-circle" size={18} color={colors.primary} />
+                  <Text style={styles.addButtonText}>New routine for {member.name}</Text>
+                </Pressable>
+              )}
             </View>
           );
         })
